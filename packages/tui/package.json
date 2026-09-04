@@ -1,0 +1,18 @@
+{
+  "name": "@fuck/tui",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "fuck": "bin/fuck.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-tui": "^0.84.4",
+    "@fuck/agent": "workspace:*",
+    "@fuck/coding": "workspace:*",
+    "@fuck/config": "workspace:*",
+    "@fuck/persona": "workspace:*",
+    "chalk": "^6.0.0"
+  }
+}

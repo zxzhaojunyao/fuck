@@ -1,0 +1,33 @@
+{
+  "name": "f-ai-cli",
+  "version": "1.0.0",
+  "description": "FUCK - a terminal AI coding agent (single file, zero dependencies). Windows x64.",
+  "license": "MIT",
+  "bin": {
+    "fuck": "bin/fuck.js"
+  },
+  "scripts": {
+    "postinstall": "node bin/install.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "cli",
+    "tui",
+    "terminal",
+    "coding-agent"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zxzhaojunyao/fuck"
+  }
+}

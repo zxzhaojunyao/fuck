@@ -1,0 +1,35 @@
+{
+  "name": "fuck",
+  "version": "0.1.0",
+  "description": "A terminal AI coding agent - single file, packable, ready to use",
+  "type": "module",
+  "packageManager": "bun@1.4.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zxzhaojunyao/fuck"
+  },
+  "keywords": ["ai", "agent", "cli", "tui", "terminal", "coding-agent"],
+  "engines": {
+    "bun": ">=1.4.0"
+  },
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "bun --cwd packages/tui src/index.ts",
+    "build": "bun --cwd packages/tui build.ts",
+    "test": "bun packages/agent/src/test.ts && bun packages/agent/src/test-session.ts && bun packages/agent/src/test-extension.ts && bun packages/coding/src/test.ts",
+    "typecheck": "bun tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^2",
+    "@earendil-works/pi-tui": "0.84.4",
+    "chalk": "6.0.0",
+    "diff": "9.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "@types/diff": "8.0.0",
+    "@types/node": "^24",
+    "typescript": "^7.0.2"
+  }
+}

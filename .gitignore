@@ -1,0 +1,57 @@
+# dependencies
+node_modules/
+.bun/
+
+# bundled runtime (local dev only, install bun separately)
+bun.exe
+
+# build artifacts
+packages/tui/fuck
+packages/tui/fuck.exe
+packages/tui/grammars/
+packages/tui/dist/
+dist/
+build/
+
+# runtime data
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# secrets / env
+.env
+.env.local
+*.pem
+
+# logs
+logs/
+*.log
+
+# test / coverage
+coverage/
+.tmp/
+
+# os
+.DS_Store
+Thumbs.db
+
+# editor / ide
+.vscode/
+.idea/
+*.swp
+
+# scratch
+*.tmp
+*.bak
+
+# CTF bench scratch (contains real tokens / internal IPs / challenge data — never publish)
+work/
+g.py
+packages/tui/*.zip
+
+# build cache.bun-cache/
+
+FUCK_MEMORY.md
+

@@ -1,0 +1,19 @@
+# Source files: LF endings (prevents CRLF churn across platforms)
+* text=auto
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Windows batch scripts: CRLF (cmd needs it)
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# binaries
+*.exe binary
+*.wasm binary
+*.png binary
+*.ico binary
