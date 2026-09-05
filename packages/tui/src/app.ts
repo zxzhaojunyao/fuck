@@ -131,6 +131,7 @@ export async function runApp(cwd: string, resumeId?: string) {
     statusBar.running = true
     spinnerTimer = setInterval(() => {
       statusBar.frame++
+      statusBar.tokens = contextTokens(agent.messages)
       requestRender()
     }, 120)
   }
@@ -254,7 +255,7 @@ export async function runApp(cwd: string, resumeId?: string) {
         break
       case "tool_end":
         if (activeDelegate) {
-          activeDelegate.markDone(e.result.content)
+          activeDelegate.markDone()
           activeDelegate = null
         }
         if (activeTool) {
@@ -270,6 +271,17 @@ export async function runApp(cwd: string, resumeId?: string) {
         activeTool = null
         running = false
         stopSpinner()
+        break
+      case "compaction":
+        // show compaction to the user (like opencode): a dim line + summary length
+        transcript.addChild(
+          new Text(
+            `⟳ context compacted: kept ${e.remainingMessages} messages (summary ${e.summaryLength} chars)`,
+            1,
+            0
+          )
+        )
+        requestRender()
         break
       case "error":
         running = false
@@ -450,7 +462,7 @@ export async function runApp(cwd: string, resumeId?: string) {
         const found = extensions.getCommands().find((c) => c.name === name)
         if (found) {
           const args = cmdNameArgs(cmd)
-          const ctx = extensionCtx(extensions)
+          const ctx = extensionCtx()
           void Promise.resolve(found.handler(args, ctx))
         }
       }
@@ -462,7 +474,7 @@ export async function runApp(cwd: string, resumeId?: string) {
     return i === -1 ? "" : cmd.slice(i + 1)
   }
 
-  function extensionCtx(ext: typeof extensions) {
+  function extensionCtx() {
     return {
       cwd,
       ui,

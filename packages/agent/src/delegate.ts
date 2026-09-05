@@ -18,16 +18,40 @@ export type DelegateOptions = {
   maxDepth?: number
   // max sub-agents per delegate call (dynamic; e.g. CTF injects the platform's concurrent-slot limit)
   maxTasks?: number
+  // max turns per sub-agent (stop-loss: a sub-agent that keeps calling tools can't run forever)
+  maxTurns?: number
 }
 
-const DEFAULT_SUB_SYSTEM =
-  "You are a focused sub-agent. Complete the assigned task in isolation and return a single, concrete final answer. Do not ask questions; use tools to verify your result, then report the outcome."
+// fan-out worker contract: a worker executes ONE bounded intent, reports a concrete
+// result, then STOPS. It must NOT expand into autonomous exploration — that is the
+// planner's job. This is what makes fan-out workers terminate reliably (unlike a
+// full agent loop, which relies on "the model stops calling tools" and never does
+// during a pentest).
+const DEFAULT_SUB_SYSTEM = [
+  "You are a fan-out worker spawned to explore ONE specific, bounded intent.",
+  "Your job: carry out that single operation with tools, then report a concrete result (success / failure / what you found) in 1-3 sentences and STOP.",
+  "Do NOT expand beyond the assigned intent. Do NOT autonomously start exploring other angles — that is the planner's job, not yours.",
+  "Do NOT ask questions. Verify with a tool, then report and stop.",
+  "If you cannot complete the intent, report exactly what you tried and what blocked you — that IS a valid result.",
+].join(" ")
 
-// extract the final answer from a finished sub-agent
+// extract the final answer from a finished sub-agent.
+// prefers the last assistant text; falls back to reasoning (reasoning models may
+// put the answer there and leave content empty); last resort: last tool result.
 function finalAnswer(produced: AgentMessage[]): string {
   for (let i = produced.length - 1; i >= 0; i--) {
     const m = produced[i]
     if (m.role === "assistant" && m.content) return m.content
+  }
+  for (let i = produced.length - 1; i >= 0; i--) {
+    const m = produced[i]
+    if (m.role === "assistant" && (m as { reasoning?: string }).reasoning) {
+      return (m as { reasoning?: string }).reasoning!.slice(-2000)
+    }
+  }
+  for (let i = produced.length - 1; i >= 0; i--) {
+    const m = produced[i]
+    if (m.role === "tool" && m.content) return m.content.slice(0, 2000)
   }
   return "(no output)"
 }
@@ -57,6 +81,8 @@ function linePrefixed(
 export function createDelegateTool(opts: DelegateOptions, depth = 0): ToolDefinition {
   const maxDepth = opts.maxDepth ?? 2
   const maxTasks = opts.maxTasks ?? 10
+  // intent 粒度的 worker 应该在少数几步内完成；40 轮是慷慨的兜底，防止失控
+  const maxTurns = opts.maxTurns ?? 40
 
   // the sub-agent's tool set: base tools minus delegate, plus a nested delegate at depth+1
   function subAgentTools(toolNames: string[] | undefined): ToolDefinition[] {
@@ -85,6 +111,7 @@ export function createDelegateTool(opts: DelegateOptions, depth = 0): ToolDefini
       hook: opts.hook,
       turnHook: opts.turnHook,
       compaction: opts.compaction,
+      maxTurns,
     })
 
     // forward the sub-agent's live events to the parent as structured events
@@ -126,22 +153,24 @@ export function createDelegateTool(opts: DelegateOptions, depth = 0): ToolDefini
 
   return {
     name: "delegate",
-    description: `Spawn sub-agents to work on independent tasks in PARALLEL. Each sub-agent runs in its own isolated context with its own tool subset and returns one final answer. Use for fan-out: give each sub-agent a distinct, non-overlapping task. At most ${maxTasks} tasks per call. Returns all results.`,
+    description: `Fan out N independent intents to N parallel workers. Each worker executes ONE bounded, non-overlapping intent and reports a concrete result (success/failure/finding), then stops. This is for trying multiple paths at once — NOT for delegating an entire goal. Give each worker a small, well-scoped intent, not "solve this whole challenge". At most ${maxTasks} workers per call.`,
     schema: z.object({
       tasks: z
         .array(
           z.object({
-            task: z.string().describe("the complete, self-contained task for this sub-agent"),
+            task: z
+              .string()
+              .describe("ONE bounded, concrete intent for this worker (e.g. 'test the login endpoint for SQLi', 'scan port 80 for directories'). Not an entire goal."),
             tools: z
               .array(z.string())
               .optional()
-              .describe("optional tool-name subset for this sub-agent (default: all non-delegate tools)"),
-            system: z.string().optional().describe("optional task-specific system prompt override"),
+              .describe("optional tool-name subset for this worker (default: all non-delegate tools)"),
+            system: z.string().optional().describe("optional intent-specific system prompt override"),
           })
         )
         .min(1)
         .max(maxTasks)
-        .describe(`one or more independent tasks to run in parallel (max ${maxTasks})`),
+        .describe(`one or more independent intents to run in parallel (max ${maxTasks})`),
     }),
     execute: async (args, signal, onUpdate, onEvent) => {
       const tasks = args.tasks as { task: string; tools?: string[]; system?: string }[]

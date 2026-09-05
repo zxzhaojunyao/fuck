@@ -1,6 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
+import type { TurnHook } from "../hooks"
+import type { AgentMessage } from "../types"
 
 export type Skill = {
   name: string
@@ -42,4 +44,27 @@ export function matchSkills(skills: Skill[], userText: string): Skill[] {
     const words = `${s.name} ${s.description}`.toLowerCase().split(/[，,、\s]+/)
     return words.some((w) => w.length > 1 && text.includes(w))
   })
+}
+
+// load skills on demand: each turn, match the latest user message against the skill
+// list and inject ONLY the matching skill bodies. This keeps the base system prompt
+// tiny (just a skill catalog) instead of bloating every request with all skill text.
+export function createSkillHook(skills: Skill[]): TurnHook {
+  const latestUserText = (messages: AgentMessage[]): string => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i]
+      if (m.role === "user") return m.content
+    }
+    return ""
+  }
+  return {
+    beforeTurn({ messages }) {
+      const userText = latestUserText(messages)
+      const matched = matchSkills(skills, userText)
+      if (!matched.length) return null
+      return matched
+        .map((s) => `<skill:${s.name}>\n${s.content}\n</skill:${s.name}>`)
+        .join("\n\n")
+    },
+  }
 }

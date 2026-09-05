@@ -1,4 +1,3 @@
-import type { z } from "zod"
 import type { AgentMessage, ToolCall, ToolDefinition, ToolResultMessage } from "../types"
 
 // ---- extension system types ----

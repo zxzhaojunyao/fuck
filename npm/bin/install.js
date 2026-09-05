@@ -8,7 +8,7 @@ const { join } = require("node:path")
 
 // Override with FUCK_REPO env if you host the binaries elsewhere.
 const REPO = process.env.FUCK_REPO || "zxzhaojunyao/fuck"
-const VERSION = "v1.0.0"
+const VERSION = "v1.0.1"
 const FILE = "fuck-windows-x64.zip"
 
 const url = `https://github.com/${REPO}/releases/download/${VERSION}/${FILE}`

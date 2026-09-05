@@ -1,7 +1,5 @@
 import { z } from "zod"
 import { Agent } from "./agent"
-import { EventStream } from "./event-stream"
-import { runAgentLoop } from "./agent-loop"
 import type { ModelAdapter } from "./model-adapter"
 import type { AgentEvent, AssistantMessage, ToolDefinition } from "./types"
 
@@ -32,12 +30,6 @@ const echoTool: ToolDefinition = {
   description: "return the input string",
   schema: z.object({ text: z.string() }),
   execute: async (args) => `echoed: ${args.text}`,
-}
-
-async function collectEvents(agent: Agent): Promise<AgentEvent[]> {
-  const events: AgentEvent[] = []
-  agent.events.subscribe((e) => events.push(e))
-  return events
 }
 
 // 1. single-turn tool-call loop: user -> assistant(toolCall) -> tool result -> assistant(final text)
@@ -79,7 +71,6 @@ async function collectEvents(agent: Agent): Promise<AgentEvent[]> {
     }),
     () => ({ role: "assistant", content: "after", toolCalls: [], stopReason: "stop" }),
   ])
-  let blocked = false
   const agent = new Agent({
     model,
     system: "test",
@@ -129,7 +120,7 @@ async function collectEvents(agent: Agent): Promise<AgentEvent[]> {
 {
   let callCount = 0
   const model: ModelAdapter = {
-    async stream({ messages }, emit) {
+    async stream({ messages: _messages }, emit) {
       callCount++
       // intentionally slow, so steering arrives while running
       await new Promise((r) => setTimeout(r, 20))

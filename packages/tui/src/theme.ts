@@ -80,7 +80,7 @@ const PALETTES: Record<string, Palette> = {
 const KW =
   /\b(?:const|let|var|function|return|if|else|for|while|class|import|export|from|new|async|await|try|catch|throw|switch|case|break|continue|def|elif|print|lambda|with|as|pass|go|func|package|type|struct|range|select|use|fn|pub|impl|match|where|true|false|null|undefined|None|self|this)\b/
 
-function highlightCode(code: string, lang?: string): string[] {
+function highlightCode(code: string, _lang?: string): string[] {
   const out: string[] = []
   for (const line of code.split("\n")) {
     let result = ""

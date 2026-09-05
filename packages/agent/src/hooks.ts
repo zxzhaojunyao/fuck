@@ -1,4 +1,4 @@
-import type { ToolCall, ToolResultMessage } from "./types"
+import type { AgentMessage, ToolCall, ToolResultMessage } from "./types"
 
 // ---- tool hooks ----
 
@@ -24,10 +24,10 @@ export type ToolHook = {
   shouldTerminate?(results: ToolResultMessage[]): boolean | Promise<boolean>
 }
 
-// turn hook: cross-turn context such as error-memory injection
+// turn hook: cross-turn context such as error-memory / skill-loading injection
 export type TurnHook = {
   // before each turn: return context to inject (e.g. "failed on X last time, don't repeat"), or null
-  beforeTurn?(context: { toolErrors: ToolResultMessage[] }): string | null | Promise<string | null>
+  beforeTurn?(context: { toolErrors: ToolResultMessage[]; messages: AgentMessage[] }): string | null | Promise<string | null>
 }
 
 // compose multiple ToolHooks into one: run beforeToolCall in order (block wins, input merges),
@@ -61,6 +61,23 @@ export function composeHooks(...hooks: (ToolHook | undefined)[]): ToolHook | und
         if (await h.shouldTerminate(results)) return true
       }
       return false
+    },
+  }
+}
+
+// compose multiple TurnHooks: run beforeTurn in order, join non-empty injections
+export function composeTurnHooks(...hooks: (TurnHook | undefined)[]): TurnHook | undefined {
+  const active = hooks.filter((h): h is TurnHook => !!h)
+  if (active.length === 0) return undefined
+  return {
+    async beforeTurn(context) {
+      const parts: string[] = []
+      for (const h of active) {
+        if (!h.beforeTurn) continue
+        const r = await h.beforeTurn(context)
+        if (r) parts.push(r)
+      }
+      return parts.length ? parts.join("\n\n") : null
     },
   }
 }

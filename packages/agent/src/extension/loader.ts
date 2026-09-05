@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync, readFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join, isAbsolute } from "node:path"
 import { homedir } from "node:os"
 import { z } from "zod"
@@ -65,7 +65,6 @@ function discoverInDir(dir: string): string[] {
     if (e.isFile() && (e.name.endsWith(".ts") || e.name.endsWith(".js"))) {
       out.push(p)
     } else if (e.isDirectory()) {
-      const idx = join(p, "index.ts") || join(p, "index.js")
       const indexTs = join(p, "index.ts")
       const indexJs = join(p, "index.js")
       if (existsSync(indexTs)) out.push(indexTs)

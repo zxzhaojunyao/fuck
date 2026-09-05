@@ -99,7 +99,7 @@ export class DelegateCard implements Component {
     }
   }
 
-  markDone(result: string) {
+  markDone() {
     // called on tool_end: any still-running section is finalized
     for (const s of this.sections.values()) {
       if (s.status === "running") {

@@ -1,5 +1,5 @@
 import { z } from "zod"
-import type { ExtensionAPI, ExtensionContext, ExtensionToolDefinition } from "../extension/types"
+import type { ExtensionAPI, ExtensionToolDefinition } from "../extension/types"
 
 // ---- built-in todo extension ----
 

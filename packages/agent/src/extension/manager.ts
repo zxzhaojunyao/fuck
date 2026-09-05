@@ -14,7 +14,7 @@ import type {
   ToolResultEvent,
   ToolResultEventResult,
 } from "./types"
-import type { ToolHook, TurnHook } from "../hooks"
+import type { ToolHook } from "../hooks"
 import type { AgentMessage, ToolCall, ToolResultMessage } from "../types"
 
 // ---- extension manager: load extensions + dispatch events + bridge to agent-loop hooks ----
@@ -138,7 +138,7 @@ export class ExtensionManager {
       .then((r) => r?.messages)
   }
 
-  // ---- bridge: expose interception points as ToolHook / TurnHook (for agent-loop) ----
+  // ---- bridge: expose interception points as ToolHook (for agent-loop) ----
 
   toolHook(): ToolHook {
     const bus = this.bus
@@ -161,14 +161,6 @@ export class ExtensionManager {
           }),
         )
         return r ?? {}
-      },
-    }
-  }
-
-  turnHook(): TurnHook {
-    return {
-      async beforeTurn() {
-        return null
       },
     }
   }

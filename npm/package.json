@@ -1,6 +1,6 @@
 {
   "name": "f-ai-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "FUCK - a terminal AI coding agent (single file, zero dependencies). Windows x64.",
   "license": "MIT",
   "bin": {

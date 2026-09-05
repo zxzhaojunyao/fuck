@@ -51,6 +51,25 @@ work/
 g.py
 packages/tui/*.zip
 
+# CTF challenge scratch artifacts (challenge jars / exploit scripts / flag clues — never publish)
+a0*.jar
+a0*_*.txt
+a0*_*.html
+a0*.html
+a1*_*.txt
+a1*_*.html
+a14_c.txt
+a05hd.txt
+a05hd2.txt
+c0*_*.json
+c1.bin
+close_one.py
+submit_one.py
+test_contract.txt
+openapi.json
+dash_new.html
+up.html
+d0*_*.html
 # build cache.bun-cache/
 
 FUCK_MEMORY.md

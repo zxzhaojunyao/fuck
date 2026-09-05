@@ -6,11 +6,13 @@ import {
   createGraphTools,
   buildSystemPrompt,
   listSkills,
+  createSkillHook,
   createErrorMemoryHook,
   createPermissionGateHook,
   createSandboxHook,
   sandboxPrefixFromConfig,
   composeHooks,
+  composeTurnHooks,
   contextTokens,
   SessionStore,
   ExtensionManager,
@@ -24,14 +26,16 @@ import { getModel, resolveModel, currentModel, readConfig, setModel } from "@fuc
 
 // compaction thresholds: derived from the model's declared context window,
 // overridable via config.json (COMPACTION_MAX_TOKENS / COMPACTION_KEEP_RECENT_TOKENS).
+// When no context window is known, fall back to a CONSERVATIVE 128K — never 512K:
+// a too-large threshold means compaction never fires and the context blows up past
+// the real model window, making the model hallucinate/loop and eventually stop.
 function compactionThresholds(resolved: ReturnType<typeof resolveModel>) {
   const cfg = readConfig()
+  const declared = resolved.contextWindow ?? (cfg.CONTEXT_WINDOW as number | undefined) ?? 128_000
   const maxTokens =
-    (cfg.COMPACTION_MAX_TOKENS as number | undefined) ??
-    (resolved.contextWindow ? Math.floor(resolved.contextWindow * 0.6) : 512_000)
+    (cfg.COMPACTION_MAX_TOKENS as number | undefined) ?? Math.floor(declared * 0.6)
   const keepRecentTokens =
-    (cfg.COMPACTION_KEEP_RECENT_TOKENS as number | undefined) ??
-    (resolved.contextWindow ? Math.floor(resolved.contextWindow * 0.15) : 128_000)
+    (cfg.COMPACTION_KEEP_RECENT_TOKENS as number | undefined) ?? Math.floor(declared * 0.15)
   return { maxTokens, keepRecentTokens }
 }
 
@@ -71,7 +75,7 @@ export async function createRuntime(
         "Summarize the conversation so far. Preserve all important facts, decisions, findings, file operations, credentials/flag values, and open questions. Be concise but lossless for anything that matters to the task.",
       ),
   }
-  const turnHook = createErrorMemoryHook()
+  const turnHook = composeTurnHooks(createErrorMemoryHook(), createSkillHook(skills))
 
   // delegate: fan-out parallel sub-agents (shared model + hooks + compaction, isolated context)
   // maxTasks is dynamic (config.DELEGATE_MAX_TASKS), so CTF can inject the platform's slot limit.

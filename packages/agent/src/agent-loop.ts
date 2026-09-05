@@ -39,6 +39,9 @@ export type AgentLoopOptions = {
   goalTest?: (messages: AgentMessage[]) => Promise<GoalTestResult>
   // max auto-continue rounds driven by goalTest (infinite-loop guard)
   maxAutoContinue?: number
+  // max total turns (assistant generations) in this loop; a hard stop-loss so a
+  // sub-agent that keeps calling tools can't run forever
+  maxTurns?: number
   // turn events (for the extension system)
   onTurnStart?: () => void | Promise<void>
   onTurnEnd?: () => void | Promise<void>
@@ -105,9 +108,10 @@ export async function runAgentLoop(
   const steering = opts.steering ?? new MessageQueue()
   const followUp = opts.followUp ?? new MessageQueue()
   const maxNoTextSteps = opts.maxNoTextSteps ?? 8
-  const maxRetries = opts.maxRetries ?? 3
   const maxAutoContinue = opts.maxAutoContinue ?? 10
+  const maxTurns = opts.maxTurns ?? Infinity
   let autoContinueCount = 0
+  let turnCount = 0
 
   const toolMap = new Map(opts.tools.map((t) => [t.name, t]))
 
@@ -133,7 +137,7 @@ export async function runAgentLoop(
       // 1.5 turn hook: error-memory injection (cross-turn context)
       let system = opts.system
       if (opts.turnHook?.beforeTurn) {
-        const extra = await opts.turnHook.beforeTurn({ toolErrors })
+        const extra = await opts.turnHook.beforeTurn({ toolErrors, messages: context })
         if (extra) system = opts.system + "\n\n" + extra
       }
 
@@ -176,6 +180,15 @@ export async function runAgentLoop(
       // 3. execute tool calls
       const toolCalls = assistant.toolCalls ?? []
       const truncated = TRUNCATED_REASONS.has(assistant.stopReason ?? "")
+
+      turnCount++
+      if (turnCount > maxTurns) {
+        opts.emit({
+          type: "error",
+          error: new Error(`max turns (${maxTurns}) reached; stopping`),
+        })
+        return produced
+      }
 
       let results: ToolResultMessage[] = []
       if (toolCalls.length > 0) {

@@ -1,5 +1,4 @@
 import type { TurnHook } from "../hooks"
-import type { ToolResultMessage } from "../types"
 
 // error-memory injection: distill recent tool errors into
 // a "don't repeat this" context injected into the system prompt before the next turn, so the model stops making the same mistakes.

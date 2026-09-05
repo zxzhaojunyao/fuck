@@ -1,4 +1,4 @@
-import { Markdown, type Component, type MarkdownTheme } from "@earendil-works/pi-tui"
+import { Markdown, type Component } from "@earendil-works/pi-tui"
 import type { FuckTheme } from "../theme"
 
 // a message: role label + body (assistant rendered as Markdown, user as plain text)

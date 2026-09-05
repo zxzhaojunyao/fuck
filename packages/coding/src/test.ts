@@ -17,7 +17,7 @@ console.assert(readOut.includes("add") && readOut.includes("1 |"), "read include
 console.log("read: OK")
 
 // write
-const writeOut = (await byName.get("write")!.execute({ path: "new.txt", content: "created" })) as string
+await byName.get("write")!.execute({ path: "new.txt", content: "created" })
 console.assert(readFileSync(join(dir, "new.txt"), "utf8") === "created", "write creates")
 console.log("write: OK")
 

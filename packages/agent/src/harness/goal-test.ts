@@ -12,9 +12,6 @@ export type GoalScene = "none" | "ctf" | "coding" | (string & {})
 const SUCCESS_RE =
   /(accepted|correct|flag\{[^}]+\}|solved|pwned|verified|验证通过|已确认|匹配成功|登录成功|拿到\s*flag|tests?\s+(pass|passed|green|全部通过))/i
 
-// completion + error markers
-const ERROR_RE = /(error|failed|exception|timed?\s*out|报错|失败|超时)/i
-
 export function createGoalTest(scene: GoalScene): ((messages: AgentMessage[]) => Promise<GoalTestResult>) | undefined {
   switch (scene) {
     case "none":

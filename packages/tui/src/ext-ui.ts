@@ -107,8 +107,7 @@ export function createUIContext(
       })
     },
 
-    notify(message, type: UINotifyType = "info") {
-      const color = type === "error" ? theme.palette.error : type === "warning" ? theme.palette.warning : theme.palette.primary
+    notify(message: string, _type: UINotifyType = "info") {
       const c = new Container()
       c.addChild(new Text(message, 1, 1))
       // auto-close notification overlay after 2s (non-blocking)

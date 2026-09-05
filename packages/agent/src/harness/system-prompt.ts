@@ -26,22 +26,32 @@ export function buildSystemPrompt(opts: {
       ].join("\n")
   )
 
-  // 3. loaded skills (enabled on demand)
+  // 2.5 anti-tunnel-vision discipline (stops the agent from looping on one dead end)
+  sections.push(
+    [
+      "Anti-tunnel-vision discipline:",
+      "- If the same action fails 2 times, STOP repeating it. Switch approach, not a slightly-tweaked retry.",
+      "- If you are stuck on one sub-problem for more than ~8 tool calls, pause and re-plan at the goal level: is there an easier untouched target? State what you have and move on.",
+      "- Do not re-derive facts you already established. Trust earlier confirmed results instead of re-checking them.",
+      "- When many independent targets remain, prioritize breadth (touch each once) over depth (grind one into the ground).",
+      "- Track open targets explicitly (todo or graph); when one stalls, drop it and pick the next unvisited one.",
+    ].join("\n")
+  )
+
+  // 3. loaded skills: catalog only (name + description). The full skill bodies are
+  // loaded on demand via the skill turn hook (matchSkills) to keep this prompt small.
   if (opts.skills?.length) {
-    sections.push(formatSkills(opts.skills))
+    sections.push(formatSkillCatalog(opts.skills))
   }
 
   return sections.join("\n\n")
 }
 
-function formatSkills(skills: Skill[]): string {
+function formatSkillCatalog(skills: Skill[]): string {
   return (
-    "## Available Skills (use when relevant, ignore otherwise)\n" +
+    "## Available Skills (bodies are auto-loaded when relevant; do not guess their contents)\n" +
     skills
-      .map(
-        (s) =>
-          `### ${s.name}\n${s.description}\n\n<skill:${s.name}>\n${s.content}\n</skill:${s.name}>`
-      )
-      .join("\n\n")
+      .map((s) => `- ${s.name}: ${s.description.split("\n")[0]}`)
+      .join("\n")
   )
 }

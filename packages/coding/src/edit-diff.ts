@@ -226,7 +226,7 @@ export function generateUnifiedPatch(path: string, oldContent: string, newConten
   })
 }
 
-export function generateDisplayDiff(oldContent: string, newContent: string, context = 3): string {
+export function generateDisplayDiff(oldContent: string, newContent: string): string {
   const parts = Diff.diffLines(oldContent, newContent)
   const oldLines = oldContent.split("\n")
   const newLines = newContent.split("\n")

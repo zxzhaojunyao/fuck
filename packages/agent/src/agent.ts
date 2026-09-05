@@ -18,6 +18,7 @@ export type AgentConfig = {
   compaction?: CompactionConfig
   goalTest?: (messages: AgentMessage[]) => Promise<GoalTestResult>
   maxAutoContinue?: number
+  maxTurns?: number
 }
 
 export type AgentStatus = "idle" | "running" | "aborted"
@@ -146,6 +147,7 @@ export class Agent {
       compaction: this.config.compaction,
       goalTest: this.config.goalTest,
       maxAutoContinue: this.config.maxAutoContinue,
+      maxTurns: this.config.maxTurns,
       emit: (e: AgentEvent) => this.events.emit(e),
       onTurnStart: () => extensions?.emitTurnStart(),
       onTurnEnd: () => extensions?.emitTurnEnd(),

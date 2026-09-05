@@ -81,6 +81,25 @@ function extractFileOps(messages: AgentMessage[]): string[] {
   return [...files]
 }
 
+// build the final compacted message list. Clears usage on kept assistant messages
+// (their inputTokens reflect the pre-compaction context, which would make contextTokens
+// misjudge the new size and re-trigger compaction every turn), and stamps the summary
+// with a fresh usage estimate so the next contextTokens read returns the true size.
+function finalizeCompacted(kept: AgentMessage[], summary: string): AgentMessage[] {
+  const cleared = kept.map((m) =>
+    m.role === "assistant" && m.usage ? { ...m, usage: undefined } : m
+  )
+  const summaryTokens = totalTokens(cleared) + estimateTokens(summary)
+  return [
+    {
+      role: "assistant" as const,
+      content: "[compaction summary]\n" + summary,
+      usage: { inputTokens: summaryTokens, outputTokens: 0 },
+    },
+    ...cleared,
+  ]
+}
+
 export async function compactMessages(
   messages: AgentMessage[],
   opts: CompactionOptions
@@ -103,10 +122,7 @@ export async function compactMessages(
       : opts.summarize(toSummarize))
     const fileOps = extractFileOps(toSummarize)
     if (fileOps.length) summary += "\n\n[file operations]\n" + fileOps.map((f) => `- ${f}`).join("\n")
-    return {
-      summary,
-      messages: [{ role: "assistant", content: "[compaction summary]\n" + summary }, ...kept],
-    }
+    return { summary, messages: finalizeCompacted(kept, summary) }
   }
 
   const toSummarize = messages.slice(0, cut)
@@ -125,13 +141,7 @@ export async function compactMessages(
     summary += "\n\n[file operations]\n" + fileOps.map((f) => `- ${f}`).join("\n")
   }
 
-  // after compaction: summary as the first entry, keep recent messages
-  const compacted: AgentMessage[] = [
-    { role: "assistant", content: "[compaction summary]\n" + summary },
-    ...kept,
-  ]
-
-  return { summary, messages: compacted }
+  return { summary, messages: finalizeCompacted(kept, summary) }
 }
 
 export function needsCompaction(messages: AgentMessage[], maxTokens: number): boolean {
