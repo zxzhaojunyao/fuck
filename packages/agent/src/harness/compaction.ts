@@ -1,6 +1,14 @@
-import type { AgentMessage } from "../types"
+import type { AgentMessage, CompactionSummaryMessage } from "../types"
 
-// ---- automatic context compaction ----
+// ---- automatic context compaction (non-destructive) ----
+//
+// Design mirrors opencode's compaction: compaction NEVER deletes history. It
+// inserts a `compaction` marker message that carries an accumulated summary.
+// The full history stays in memory and on disk; `projectContext` folds away
+// everything covered by the marker into a single summary message that is what
+// actually gets sent to the model. On the next compaction the previous summary
+// is merged (not re-summarized from scratch), so context is never lost — only
+// the *view* sent to the model shrinks.
 
 export type CompactionOptions = {
   maxTokens: number
@@ -26,6 +34,7 @@ export function estimateTokens(text: string): number {
 }
 
 function messageTokens(m: AgentMessage): number {
+  if (m.role === "compaction") return estimateTokens(m.summary)
   return estimateTokens(
     (m.role === "user" || m.role === "assistant" ? m.content : "") +
       (m.role === "tool" ? m.content : "")
@@ -37,29 +46,62 @@ export function totalTokens(messages: AgentMessage[]): number {
   return messages.reduce((n, m) => n + messageTokens(m), 0)
 }
 
-// the current context size, preferring the model's reported inputTokens (most accurate),
-// falling back to the per-message heuristic. The last assistant message's usage.inputTokens
-// is the token count of the full context sent on the previous call.
-export function contextTokens(messages: AgentMessage[]): number {
+export function isCompaction(m: AgentMessage): m is CompactionSummaryMessage {
+  return m.role === "compaction"
+}
+
+function lastCompactionIndex(messages: AgentMessage[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i]
+    if (messages[i].role === "compaction") return i
+  }
+  return -1
+}
+
+// project: the view actually sent to the model. Folds all compacted history
+// into ONE summary message (the accumulated summary of the last marker) and
+// keeps the first user message verbatim as the task anchor + the tail after the
+// marker. The original array is never mutated.
+export function projectContext(messages: AgentMessage[]): AgentMessage[] {
+  const marker = lastCompactionIndex(messages)
+  if (marker < 0) return messages
+
+  const summary = (messages[marker] as CompactionSummaryMessage).summary
+  const anchorIdx = messages.findIndex((m) => m.role === "user")
+  const anchor = anchorIdx >= 0 ? messages.slice(anchorIdx, anchorIdx + 1) : []
+  const tail = messages.slice(marker + 1)
+
+  const summaryMsg: AgentMessage = {
+    role: "assistant",
+    content: "[compaction summary]\n" + summary,
+  }
+  return [...anchor, summaryMsg, ...tail]
+}
+
+// the current context size of the *projected* view (what the model will see),
+// preferring the model's reported inputTokens, falling back to the heuristic.
+export function contextTokens(messages: AgentMessage[]): number {
+  const projected = projectContext(messages)
+  for (let i = projected.length - 1; i >= 0; i--) {
+    const m = projected[i]
     if (m.role === "assistant" && m.usage?.inputTokens) {
       return m.usage.inputTokens
     }
   }
-  return totalTokens(messages)
+  return totalTokens(projected)
 }
 
-// find a legal cut point from the tail: avoid splitting a turn (a user message starts a turn)
+// find a legal cut point from the tail: avoid splitting a turn (a user message
+// starts a turn). Also guarantees the cut never orphans a tool call: a kept
+// turn's tool calls always keep their tool results (same turn).
 export function findCutPoint(messages: AgentMessage[], keepRecentTokens: number): number {
   let tail = 0
   for (let i = messages.length - 1; i >= 0; i--) {
     tail += messageTokens(messages[i])
     if (tail >= keepRecentTokens) {
-      // fall back to the nearest user message as the cut point (never split mid-turn)
       let cut = i
       while (cut < messages.length && messages[cut].role !== "user") cut++
-      return Math.max(0, cut)
+      if (cut >= messages.length) return 0
+      return cut
     }
   }
   return 0
@@ -72,8 +114,7 @@ function extractFileOps(messages: AgentMessage[]): string[] {
     if (m.role === "tool") {
       if (m.toolName === "read" || m.toolName === "write" || m.toolName === "edit") {
         try {
-          const args = m.content
-          if (args) files.add(m.toolName + ": " + args.slice(0, 120))
+          if (m.content) files.add(m.toolName + ": " + m.content.slice(0, 120))
         } catch {}
       }
     }
@@ -81,67 +122,55 @@ function extractFileOps(messages: AgentMessage[]): string[] {
   return [...files]
 }
 
-// build the final compacted message list. Clears usage on kept assistant messages
-// (their inputTokens reflect the pre-compaction context, which would make contextTokens
-// misjudge the new size and re-trigger compaction every turn), and stamps the summary
-// with a fresh usage estimate so the next contextTokens read returns the true size.
-function finalizeCompacted(kept: AgentMessage[], summary: string): AgentMessage[] {
-  const cleared = kept.map((m) =>
-    m.role === "assistant" && m.usage ? { ...m, usage: undefined } : m
-  )
-  const summaryTokens = totalTokens(cleared) + estimateTokens(summary)
-  return [
-    {
-      role: "assistant" as const,
-      content: "[compaction summary]\n" + summary,
-      usage: { inputTokens: summaryTokens, outputTokens: 0 },
-    },
-    ...cleared,
-  ]
-}
-
+// non-destructive compaction: returns the ORIGINAL messages with a new
+// `compaction` marker inserted at the cut point (length grows by one). The
+// covered history is left in place; `projectContext` is what shrinks the view.
+// A failed / empty summary leaves the array untouched so a flaky model can
+// never destroy context.
 export async function compactMessages(
   messages: AgentMessage[],
   opts: CompactionOptions
 ): Promise<{ summary: string; messages: AgentMessage[] }> {
-  const tokens = contextTokens(messages)
-  if (tokens <= opts.maxTokens) {
+  if (contextTokens(messages) <= opts.maxTokens) {
     return { summary: "", messages }
   }
 
-  const cut = findCutPoint(messages, opts.keepRecentTokens)
-  if (cut <= 0) {
-    // fallback: heuristic cut point failed (e.g. real usage >> heuristic chars/4).
-    // keep only the most recent few messages so compaction always makes progress.
-    const fallback = messages.length > 6 ? messages.length - 6 : 0
-    if (fallback <= 0) return { summary: "", messages }
-    const toSummarize = messages.slice(0, fallback)
-    const kept = messages.slice(fallback)
-    let summary = await (opts.updateSummary
-      ? opts.updateSummary(opts.currentSummary ?? "", toSummarize)
-      : opts.summarize(toSummarize))
-    const fileOps = extractFileOps(toSummarize)
-    if (fileOps.length) summary += "\n\n[file operations]\n" + fileOps.map((f) => `- ${f}`).join("\n")
-    return { summary, messages: finalizeCompacted(kept, summary) }
-  }
+  // the increment to summarize starts right after the last marker (or from the
+  // top if there is none). The task anchor (first user) is never re-summarized —
+  // it is kept verbatim by projectContext.
+  const marker = lastCompactionIndex(messages)
+  const start = marker + 1
+  const working = messages.slice(start)
 
-  const toSummarize = messages.slice(0, cut)
-  const kept = messages.slice(cut)
+  const cut = findCutPoint(working, opts.keepRecentTokens)
+  if (cut <= 0) return { summary: "", messages }
+
+  const toSummarize = working.slice(0, cut)
+  const previousSummary =
+    marker >= 0 ? (messages[marker] as CompactionSummaryMessage).summary : undefined
 
   let summary: string
-  if (opts.updateSummary) {
-    summary = await opts.updateSummary(opts.currentSummary ?? "", toSummarize)
-  } else {
-    summary = await opts.summarize(toSummarize)
+  try {
+    summary = previousSummary !== undefined && opts.updateSummary
+      ? await opts.updateSummary(previousSummary, toSummarize)
+      : await opts.summarize(toSummarize)
+  } catch {
+    // summary failure must never destroy the working set — leave it untouched
+    return { summary: "", messages }
   }
+  if (!summary || !summary.trim()) return { summary: "", messages }
 
-  // append file-operation tracking
   const fileOps = extractFileOps(toSummarize)
   if (fileOps.length) {
     summary += "\n\n[file operations]\n" + fileOps.map((f) => `- ${f}`).join("\n")
   }
 
-  return { summary, messages: finalizeCompacted(kept, summary) }
+  const markerMsg: CompactionSummaryMessage = { role: "compaction", summary }
+  const insertAt = start + cut
+  return {
+    summary,
+    messages: [...messages.slice(0, insertAt), markerMsg, ...messages.slice(insertAt)],
+  }
 }
 
 export function needsCompaction(messages: AgentMessage[], maxTokens: number): boolean {

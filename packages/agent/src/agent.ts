@@ -120,6 +120,11 @@ export class Agent {
   private async start(content: string): Promise<AgentMessage[]> {
     if (this._status === "running") throw new Error("agent already running")
 
+    // drop any stale steering/follow-up left over from a previous aborted run,
+    // so they don't leak into this new task
+    this.steering.clear()
+    this.followUpQueue.clear()
+
     // push the first user message into context before starting the loop
     this.context.push({ role: "user", content })
     this._status = "running"

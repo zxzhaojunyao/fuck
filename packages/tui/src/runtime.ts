@@ -65,16 +65,71 @@ export async function createRuntime(
   const extensions = new ExtensionManager()
 
   // auto-compaction: summarize older context when it grows past the threshold.
+  // Non-destructive + incremental: each summary is merged into the previous one,
+  // so no instruction or finding is ever lost — only the view sent to the model
+  // shrinks (see harness/compaction.ts).
   const { maxTokens, keepRecentTokens } = compactionThresholds(resolved)
-  const compaction = {
-    maxTokens,
-    keepRecentTokens,
-    summarize: (messages: Parameters<typeof adapter.summarize>[0]) =>
-      adapter.summarize(
-        messages,
-        "Summarize the conversation so far. Preserve all important facts, decisions, findings, file operations, credentials/flag values, and open questions. Be concise but lossless for anything that matters to the task.",
-      ),
-  }
+  const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
+<template>
+## Objective
+- [one or two brief sentences describing what the user is trying to accomplish]
+
+## Important Details
+- [constraints/preferences, decisions and why, important facts/assumptions, exact context needed to continue, or "(none)"]
+
+## Work State
+### Completed
+- [finished work, verified facts, or changes made; otherwise "(none)"]
+
+### Active
+- [current work, partial changes, or investigation state; otherwise "(none)"]
+
+### Blocked
+- [blockers, failing commands, or unknowns; otherwise "(none)"]
+
+## Next Move
+1. [immediate concrete action, or "(none)"]
+2. [next action if known, or "(none)"]
+
+## Relevant Files
+- [file or directory path: why it matters, or "(none)"]
+</template>
+
+Rules:
+- Keep every section, even when empty.
+- Use terse bullets, not prose paragraphs.
+- Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
+- Do not mention the summary process or that context was compacted.
+- The user's original instructions and constraints MUST be preserved verbatim.`
+
+  const summarize = (messages: Parameters<typeof adapter.summarize>[0]) =>
+    adapter.summarize(
+      messages,
+      "Create a summary from the conversation so another coding agent can continue the work. The user's original task and every instruction/constraint MUST be preserved verbatim.\n\n" +
+        SUMMARY_TEMPLATE,
+    )
+  const updateSummary = (previous: string, messages: Parameters<typeof adapter.summarize>[0]) =>
+    adapter.summarize(
+      messages,
+      `You are merging a running summary with new conversation into a single new summary.
+
+<prior-summary>
+${previous}
+</prior-summary>
+
+The <prior-summary> summarizes everything that happened before the new conversation. Construct a new summary that combines both. The <prior-summary> is discarded after this: anything you do not carry into the new summary is lost.
+
+When combining:
+- Carry forward objectives, constraints, user directives, decisions, and parallel workstreams from the <prior-summary> even when the new conversation does not mention them. Drop only what is finished and no longer needed.
+- The new conversation is more recent than the <prior-summary>. Where they conflict, the conversation wins: state the corrected fact and drop the old claim.
+- Add new progress, decisions, constraints, and context from the conversation.
+- Move completed work from "Active" to "Completed".
+- If a blocker has been resolved, update the summary to reflect that while keeping any details still needed to continue the work.
+- Update "Objective" and "Next Move" to reflect the current work state.
+
+` + SUMMARY_TEMPLATE,
+    )
+  const compaction = { maxTokens, keepRecentTokens, summarize, updateSummary }
   const turnHook = composeTurnHooks(createErrorMemoryHook(), createSkillHook(skills))
 
   // delegate: fan-out parallel sub-agents (shared model + hooks + compaction, isolated context)

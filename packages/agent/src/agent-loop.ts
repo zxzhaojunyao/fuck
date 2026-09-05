@@ -1,7 +1,7 @@
 import type { ModelAdapter } from "./model-adapter"
 import type { ToolHook, TurnHook } from "./hooks"
 import { MessageQueue } from "./message-queue"
-import { compactMessages, needsCompaction, type CompactionConfig } from "./harness/compaction"
+import { compactMessages, needsCompaction, projectContext, type CompactionConfig } from "./harness/compaction"
 import type {
   AgentEvent,
   AgentMessage,
@@ -24,8 +24,6 @@ export type AgentLoopOptions = {
   followUp?: MessageQueue
   signal?: AbortSignal
   emit: (event: AgentEvent) => void
-  // infinite-loop guard: force-stop after N consecutive steps with no text
-  maxNoTextSteps?: number
   // how many times to retry a failed model stream (transient/network errors)
   maxRetries?: number
   // context event: filter/inject messages before each LLM call (returns the new array)
@@ -107,7 +105,6 @@ export async function runAgentLoop(
   const produced: AgentMessage[] = []
   const steering = opts.steering ?? new MessageQueue()
   const followUp = opts.followUp ?? new MessageQueue()
-  const maxNoTextSteps = opts.maxNoTextSteps ?? 8
   const maxAutoContinue = opts.maxAutoContinue ?? 10
   const maxTurns = opts.maxTurns ?? Infinity
   let autoContinueCount = 0
@@ -115,8 +112,14 @@ export async function runAgentLoop(
 
   const toolMap = new Map(opts.tools.map((t) => [t.name, t]))
 
-  let noTextSteps = 0
   let toolErrors: ToolResultMessage[] = []
+
+  // doom-loop guard: repeatedly calling the SAME tool with IDENTICAL arguments
+  // means the model is stuck in a loop. Fully automatic (no human in the loop):
+  // steer once to force a different approach, then abort if it still repeats.
+  const DOOM_THRESHOLD = 3
+  let doomLoopCount = 0
+  let recentToolCalls: string[] = []
 
   // ---- outer loop: follow-up resumption ----
   while (true) {
@@ -141,9 +144,9 @@ export async function runAgentLoop(
         if (extra) system = opts.system + "\n\n" + extra
       }
 
-      // 1.5 auto-compaction: when context grows past the limit, summarize older
-      // messages in place so the working set stays bounded (never sent to the store;
-      // the store keeps full fidelity and is re-compacted on resume).
+      // 1.5 auto-compaction: when the projected view grows past the limit, append a
+      // compaction marker (non-destructive — history is never deleted, only the view
+      // sent to the model shrinks). A failed/empty summary leaves context untouched.
       if (opts.compaction && needsCompaction(context, opts.compaction.maxTokens)) {
         const { summary, messages: compacted } = await compactMessages(context, {
           maxTokens: opts.compaction.maxTokens,
@@ -151,12 +154,12 @@ export async function runAgentLoop(
           summarize: opts.compaction.summarize,
           updateSummary: opts.compaction.updateSummary,
         })
-        if (compacted.length && compacted.length !== context.length) {
+        if (compacted.length !== context.length) {
           context.splice(0, context.length, ...compacted)
           opts.emit({
             type: "compaction",
             summaryLength: summary.length,
-            remainingMessages: compacted.length,
+            remainingMessages: projectContext(context).length,
           })
         }
       }
@@ -164,7 +167,8 @@ export async function runAgentLoop(
       // 2. stream one assistant message (with bounded retry for transient model/network errors)
       let assistant: AssistantMessage
       try {
-        const messages = opts.filterContext ? (await opts.filterContext(context)) ?? context : context
+        const projected = projectContext(context)
+        const messages = opts.filterContext ? (await opts.filterContext(projected)) ?? projected : projected
         assistant = await streamWithRetry(opts, { system, messages })
       } catch (err) {
         opts.emit({ type: "error", error: err instanceof Error ? err : new Error(String(err)) })
@@ -173,9 +177,6 @@ export async function runAgentLoop(
 
       context.push(assistant)
       produced.push(assistant)
-
-      if (assistant.content || assistant.reasoning) noTextSteps = 0
-      else noTextSteps++
 
       // 3. execute tool calls
       const toolCalls = assistant.toolCalls ?? []
@@ -190,15 +191,63 @@ export async function runAgentLoop(
         return produced
       }
 
+      // doom-loop detection: same tool + identical args repeated N times = stuck.
+      let doomLoop = false
+      if (toolCalls.length > 0) {
+        for (const tc of toolCalls) {
+          recentToolCalls.push(tc.name + "\u0000" + JSON.stringify(tc.arguments ?? {}))
+          if (recentToolCalls.length > DOOM_THRESHOLD) recentToolCalls.shift()
+        }
+        if (
+          recentToolCalls.length === DOOM_THRESHOLD &&
+          recentToolCalls.every((f) => f === recentToolCalls[0])
+        ) {
+          recentToolCalls = []
+          doomLoop = true
+          doomLoopCount++
+          if (doomLoopCount >= 2) {
+            opts.emit({
+              type: "error",
+              error: new Error(
+                `doom loop: repeatedly calling "${toolCalls[0].name}" with identical arguments; stopping`
+              ),
+            })
+            return produced
+          }
+          steering.push({
+            role: "user",
+            content: `You called "${toolCalls[0].name}" ${DOOM_THRESHOLD} times with identical arguments — this is a loop. Stop repeating. Take a different approach, or report what is blocking you so the user can decide.`,
+          })
+        } else {
+          doomLoopCount = 0
+        }
+      }
+
       let results: ToolResultMessage[] = []
       if (toolCalls.length > 0) {
-        results = await executeToolCalls(toolCalls, toolMap, opts.hook, truncated, opts)
-        for (const r of results) {
-          context.push(r)
-          produced.push(r)
+        if (doomLoop) {
+          // block the repeated calls, but emit error results so the tool call /
+          // tool result pairing stays intact (no orphan tool call for the model).
+          results = toolCalls.map((tc) => ({
+            role: "tool",
+            toolCallId: tc.id,
+            toolName: tc.name,
+            content: "blocked: repetitive identical calls detected (doom loop). Stop repeating and change approach.",
+            isError: true,
+          }))
+          for (const r of results) {
+            context.push(r)
+            produced.push(r)
+          }
+        } else {
+          results = await executeToolCalls(toolCalls, toolMap, opts.hook, truncated, opts)
+          for (const r of results) {
+            context.push(r)
+            produced.push(r)
+          }
+          const errors = results.filter((r) => r.isError)
+          if (errors.length) toolErrors = toolErrors.concat(errors).slice(-20)
         }
-        const errors = results.filter((r) => r.isError)
-        if (errors.length) toolErrors = toolErrors.concat(errors).slice(-20)
       }
 
       // 4. termination check
@@ -210,14 +259,6 @@ export async function runAgentLoop(
       hasMoreToolCalls = toolCalls.length > 0
 
       if (shouldTerminate) break
-
-      if (noTextSteps >= maxNoTextSteps) {
-        opts.emit({
-          type: "error",
-          error: new Error(`${maxNoTextSteps} consecutive steps produced no text; possible infinite loop, aborting`),
-        })
-        return produced
-      }
     }
 
     // ---- end of outer loop: check follow-up, then goal-test ----

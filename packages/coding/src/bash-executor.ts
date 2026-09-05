@@ -124,9 +124,35 @@ export async function runShell(
   }
   opts.signal?.addEventListener("abort", onAbort, { once: true })
 
+  // Resolve on process EXIT, not 'close'. 'close' only fires after every stdio
+  // stream is closed, but a backgrounded child (openvpn --daemon, a long-running
+  // server, `(cmd &)`, etc.) keeps the stdout/stderr pipe open after the shell
+  // exits — so waiting on 'close' hangs the tool forever and the tool result is
+  // never returned (the agent then sits there with a "tool result missing").
   const exitCode: number | null = await new Promise((resolve) => {
-    child.on("close", (code) => resolve(code))
+    child.on("exit", (code) => resolve(code))
     child.on("error", () => resolve(null))
+  })
+
+  // Drain any remaining buffered output, bounded so a held-open pipe can't hang us.
+  await new Promise<void>((resolve) => {
+    let settled = false
+    const finish = () => {
+      if (!settled) {
+        settled = true
+        resolve()
+      }
+    }
+    const pending: Promise<void>[] = []
+    if (child.stdout && !child.stdout.readableEnded) {
+      pending.push(new Promise((r) => child.stdout!.once("end", () => r())))
+    }
+    if (child.stderr && !child.stderr.readableEnded) {
+      pending.push(new Promise((r) => child.stderr!.once("end", () => r())))
+    }
+    if (pending.length) Promise.all(pending).then(finish)
+    else finish()
+    setTimeout(finish, 300)
   })
 
   clearTimeout(timer)

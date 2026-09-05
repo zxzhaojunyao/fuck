@@ -40,10 +40,20 @@ export type CustomMessage = {
   [key: string]: unknown
 }
 
+// non-destructive compaction marker. The original messages it covers are NOT
+// deleted — they stay in the history and are folded away only when projecting
+// the context that is actually sent to the model. `summary` is the accumulated
+// (merged) summary of everything covered so far.
+export type CompactionSummaryMessage = {
+  role: "compaction"
+  summary: string
+}
+
 export type AgentMessage =
   | UserMessage
   | AssistantMessage
   | ToolResultMessage
+  | CompactionSummaryMessage
   | CustomMessage
 
 // ---- tool definition ----

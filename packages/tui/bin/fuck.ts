@@ -4,7 +4,7 @@ import { runOneShot } from "../src/oneShot"
 import { runServer } from "../src/server"
 
 const args = process.argv.slice(2)
-const VERSION = "0.1.0"
+const VERSION = "1.1.0"
 
 function help() {
   console.log(`FUCK - a terminal AI coding agent

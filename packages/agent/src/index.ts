@@ -28,6 +28,8 @@ export type { SessionEntry, SessionMeta } from "./harness/session"
 export {
   compactMessages,
   needsCompaction,
+  projectContext,
+  isCompaction,
   estimateTokens,
   totalTokens,
   contextTokens,
@@ -45,6 +47,7 @@ export type {
   UserMessage,
   ToolCall,
   ToolResultMessage,
+  CompactionSummaryMessage,
   ToolDefinition,
   ToolExecuteArgs,
   ToolUpdate,

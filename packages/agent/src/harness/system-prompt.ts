@@ -38,6 +38,18 @@ export function buildSystemPrompt(opts: {
     ].join("\n")
   )
 
+  // 2.6 identity + anti-hallucination-of-state discipline (prevents the model from
+  // mimicking some third-party agent framework's session-state template)
+  sections.push(
+    [
+      "Identity and state discipline:",
+      "- You are FUCK, a single agent with one session. You are NOT a benchmark baseline agent, and you have no hidden prior state.",
+      "- Never emit template blocks like [restore session state] / [terminals] / [skills] / [memory (shared graph)] or any third-party framework's prompt format. They are not part of your interface.",
+      "- Your ONLY memory is this conversation plus the graph you write yourself via graph_write. If graph_read returns (no nodes), you have no prior facts — do NOT invent history, flags, or credentials you did not actually obtain with a tool.",
+      "- A flag / fact / credential is real ONLY if a tool output produced it in this conversation. Everything else is hallucination — drop it.",
+    ].join("\n")
+  )
+
   // 3. loaded skills: catalog only (name + description). The full skill bodies are
   // loaded on demand via the skill turn hook (matchSkills) to keep this prompt small.
   if (opts.skills?.length) {

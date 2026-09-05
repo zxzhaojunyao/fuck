@@ -49,6 +49,11 @@ function toSdkMessage(m: AgentMessage): unknown {
       ],
     }
   }
+  if (m.role === "compaction") {
+    // projectContext folds markers away before sending; this is a safety net in
+    // case a marker ever reaches the model directly — render it as plain text.
+    return { role: "assistant", content: [{ type: "text", text: "[compaction summary]\n" + m.summary }] }
+  }
   throw new Error(`unknown message role: ${String((m as { role?: string }).role)}`)
 }
 
