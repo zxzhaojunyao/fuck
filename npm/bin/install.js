@@ -8,7 +8,7 @@ const { join } = require("node:path")
 
 // Override with FUCK_REPO env if you host the binaries elsewhere.
 const REPO = process.env.FUCK_REPO || "zxzhaojunyao/fuck"
-const VERSION = "v1.1.4"
+const VERSION = "v1.1.5"
 
 // node platform/arch -> release artifact. Linux ships tar.gz (GNU tar cannot read zip).
 const TARGETS = {
