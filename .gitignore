@@ -1,0 +1,86 @@
+# dependencies
+node_modules/
+.bun/
+
+# bundled runtime (local dev only, install bun separately)
+bun.exe
+
+# build artifacts
+packages/tui/fuck
+packages/tui/fuck.exe
+packages/tui/grammars/
+packages/tui/dist/
+dist/
+build/
+
+# runtime data
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# secrets / env
+.env
+.env.local
+*.pem
+
+# logs
+logs/
+*.log
+
+# test / coverage
+coverage/
+.tmp/
+
+# os
+.DS_Store
+Thumbs.db
+
+# editor / ide
+.vscode/
+.idea/
+*.swp
+
+# scratch
+*.tmp
+*.bak
+
+# CTF bench scratch (contains real tokens / internal IPs / challenge data — never publish)
+work/
+g.py
+packages/tui/*.zip
+
+# CTF challenge scratch artifacts (challenge jars / exploit scripts / flag clues — never publish)
+a0*.jar
+a0*_*.txt
+a0*_*.html
+a0*.html
+a1*_*.txt
+a1*_*.html
+a14_c.txt
+a05hd.txt
+a05hd2.txt
+c0*_*.json
+c1.bin
+close_one.py
+submit_one.py
+test_contract.txt
+openapi.json
+dash_new.html
+up.html
+d0*_*.html
+# build cache
+bun-cache/
+
+# internal planning docs (local only, never publish)
+docs/ctf-agent-plan.md
+docs/desktop-plan.md
+
+# local experiment scratch (never publish)
+agentpass/
+__pycache__/
+*.pyc
+
+FUCK_MEMORY.md
+

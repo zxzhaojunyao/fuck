@@ -1,0 +1,90 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: bun-windows-x64
+            os: windows-latest
+            bin: fuck.exe
+            archive: fuck-windows-x64.zip
+            pack: zip
+          - target: bun-linux-x64
+            os: ubuntu-latest
+            bin: fuck
+            archive: fuck-linux-x64.tar.gz
+            pack: tar.gz
+          - target: bun-linux-arm64
+            os: ubuntu-latest
+            bin: fuck
+            archive: fuck-linux-arm64.tar.gz
+            pack: tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Install (all platform binaries)
+        run: bun install --os="*" --cpu="*"
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+      - name: Build
+        working-directory: packages/tui
+        shell: bash
+        run: FUCK_TARGETS=${{ matrix.target }} bun build.ts
+
+      - name: Package (windows zip)
+        if: matrix.pack == 'zip'
+        working-directory: packages/tui
+        shell: powershell
+        run: |
+          mkdir -p dist
+          Compress-Archive -Path 'fuck.exe' -DestinationPath 'dist/${{ matrix.archive }}' -Force
+
+      - name: Package (linux tar.gz)
+        if: matrix.pack == 'tar.gz'
+        working-directory: packages/tui
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -czf "dist/${{ matrix.archive }}" fuck
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: packages/tui/dist/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bun-*
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

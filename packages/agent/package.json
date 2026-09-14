@@ -1,0 +1,12 @@
+{
+  "name": "@fuck/agent",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@fuck/persona": "workspace:*",
+    "ai": "^6",
+    "zod": "^4"
+  }
+}

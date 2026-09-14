@@ -1,0 +1,34 @@
+{
+  "name": "@fuck/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "FUCK desktop app (Electron + React)",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "package": "electron-builder --config electron-builder.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5",
+    "electron": "^42",
+    "electron-builder": "^26",
+    "electron-vite": "^5",
+    "tailwindcss": "^4",
+    "@tailwindcss/vite": "^4",
+    "typescript": "^5",
+    "vite": "^7",
+    "react": "^19",
+    "react-dom": "^19",
+    "zustand": "^5",
+    "react-markdown": "^10",
+    "rehype-highlight": "^7"
+  },
+  "dependencies": {
+    "sharp": "0.35.4"
+  }
+}
