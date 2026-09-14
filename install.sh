@@ -18,8 +18,7 @@ case "$os" in
     platform="linux"
     ;;
   darwin)
-    echo "error: macOS binaries are not published yet (supported: linux, windows)." >&2
-    exit 1
+    platform="darwin"
     ;;
   mingw*|msys*|cygwin*)
     platform="windows"
@@ -81,6 +80,11 @@ else
   tar -xzf "$tmp" -C "$INSTALL_DIR"
 fi
 chmod 755 "${INSTALL_DIR}/${bin_name}" 2>/dev/null || true
+
+# macOS: strip the quarantine xattr so Gatekeeper doesn't block the binary
+if [ "$platform" = "darwin" ]; then
+  xattr -dr com.apple.quarantine "${INSTALL_DIR}/${bin_name}" 2>/dev/null || true
+fi
 
 # version marker (kept in sync with the npm postinstall convention)
 [ "$version" != "latest" ] && echo "$version" > "${INSTALL_DIR}/.version" || true

@@ -72,6 +72,7 @@ up.html
 d0*_*.html
 # build cache
 bun-cache/
+.bun-cache/
 
 # internal planning docs (local only, never publish)
 docs/ctf-agent-plan.md

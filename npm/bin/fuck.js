@@ -7,10 +7,11 @@ const { spawn } = require("node:child_process")
 
 const isWin = process.platform === "win32"
 const isLinux = process.platform === "linux"
+const isMac = process.platform === "darwin"
 const bin = join(homedir(), ".fuck", "bin", isWin ? "fuck.exe" : "fuck")
 
-if (!isWin && !isLinux) {
-  console.error("f-ai-cli currently ships Windows and Linux binaries only.")
+if (!isWin && !isLinux && !isMac) {
+  console.error("f-ai-cli currently ships Windows, Linux and macOS binaries only.")
   process.exit(1)
 }
 if (!existsSync(bin)) {

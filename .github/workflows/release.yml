@@ -30,6 +30,16 @@ jobs:
             bin: fuck
             archive: fuck-linux-arm64.tar.gz
             pack: tar.gz
+          - target: bun-darwin-x64
+            os: macos-latest
+            bin: fuck
+            archive: fuck-darwin-x64.tar.gz
+            pack: tar.gz
+          - target: bun-darwin-arm64
+            os: macos-latest
+            bin: fuck
+            archive: fuck-darwin-arm64.tar.gz
+            pack: tar.gz
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

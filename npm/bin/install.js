@@ -8,13 +8,15 @@ const { join } = require("node:path")
 
 // Override with FUCK_REPO env if you host the binaries elsewhere.
 const REPO = process.env.FUCK_REPO || "zxzhaojunyao/fuck"
-const VERSION = "v1.1.3"
+const VERSION = "v1.1.4"
 
 // node platform/arch -> release artifact. Linux ships tar.gz (GNU tar cannot read zip).
 const TARGETS = {
   "win32:x64": { file: "fuck-windows-x64.zip", bin: "fuck.exe", kind: "zip" },
   "linux:x64": { file: "fuck-linux-x64.tar.gz", bin: "fuck", kind: "tar.gz" },
   "linux:arm64": { file: "fuck-linux-arm64.tar.gz", bin: "fuck", kind: "tar.gz" },
+  "darwin:x64": { file: "fuck-darwin-x64.tar.gz", bin: "fuck", kind: "tar.gz" },
+  "darwin:arm64": { file: "fuck-darwin-arm64.tar.gz", bin: "fuck", kind: "tar.gz" },
 }
 
 const platform = process.platform
@@ -36,7 +38,7 @@ function installedVersion() {
 
 async function main() {
   if (!target) {
-    console.error(`f-ai-cli: unsupported platform ${platform}/${arch}. Supported: win32/x64, linux/x64, linux/arm64.`)
+    console.error(`f-ai-cli: unsupported platform ${platform}/${arch}. Supported: win32/x64, linux/x64, linux/arm64, darwin/x64, darwin/arm64.`)
     process.exit(0)
   }
 
